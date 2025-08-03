@@ -85,7 +85,8 @@ router = APIRouter(prefix="/evaluate-offer", tags=["negotiation"])
 # ───────────────────────── CSV lookup ─────────────────────────────────────────
 @lru_cache
 def rate_lookup() -> pd.Series:
-    path = os.getenv("LOADS_CSV_PATH", "./data/loads.csv")
+    # path = os.getenv("LOADS_CSV_PATH", "./data/loads.csv")
+    path = "./data/loads.csv"
     if not os.path.exists(path):
         raise RuntimeError(f"CSV not found → {path}")
     df = pd.read_csv(path, dtype={"load_id": str})
