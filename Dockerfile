@@ -9,6 +9,7 @@ ENV PYTHONUNBUFFERED=1
 RUN pip install --no-cache-dir uv
 
 WORKDIR /app
+COPY data ./data
 
 # Install project requirements with uv
 COPY requirements.txt .

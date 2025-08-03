@@ -20,9 +20,9 @@ def load_df() -> pd.DataFrame:
     Read the CSV once per process. The two date columns are parsed as timestamps
     so we can filter / sort later if needed.
     """
-    # csv_path = os.getenv("LOADS_CSV_PATH")
-    csv_path = "./data/loads.csv"
-    if not csv_path or not os.path.exists(csv_path):
+    csv_path = os.getenv("LOADS_CSV_PATH", "/app/data/loads.csv")
+   
+    if not os.path.exists(csv_path):
         raise RuntimeError(f"CSV file not found → {csv_path}")
     
     return pd.read_csv(
