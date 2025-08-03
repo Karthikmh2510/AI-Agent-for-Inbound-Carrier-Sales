@@ -1,0 +1,27 @@
+# fly.toml app configuration file generated for ai-agent-for-inbound-carrier-sales-aged-dream-9652 on 2025-08-02T21:33:44-05:00
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = 'ai-agent-for-inbound-carrier-sales-aged-dream-9652'
+primary_region = 'ord'
+
+[build]
+  dockerfile = './Dockerfile'
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = 'stop'
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ['app']
+
+[[vm]]
+  memory = '1gb'
+  cpu_kind = 'shared'
+  cpus = 1
+
+[env]
+  LOADS_CSV_PATH = "/app/data/loads.csv"
+  LOADS_JSON_PATH = "/app/data/loads.json"
