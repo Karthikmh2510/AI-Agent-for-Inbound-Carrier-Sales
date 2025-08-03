@@ -1,0 +1,31 @@
+load_id,origin,destination,pickup_datetime,delivery_datetime,equipment_type,loadboard_rate,notes,weight,commodity_type,num_of_pieces,miles,dimensions
+L9747,"San Diego,CA","Minneapolis,MN",2025-08-06T08:00,2025-08-08T02:00,PowerOnly,3313,Tarps required,31599,Paper Products,24,708,45x96x90
+L9013,"Newark,NJ","Memphis,TN",2025-08-06T08:00,2025-08-08T00:00,PowerOnly,1813,Tarps required,31395,Frozen Food,25,645,48x102x96
+L5792,"Salt Lake City,UT","Portland,OR",2025-08-04T23:00,2025-08-06T17:00,PowerOnly,3249,Keep at 38°F,25800,Furniture,23,517,53x102x110
+L2964,"Memphis,TN","Indianapolis,IN",2025-08-03T09:00,2025-08-05T00:00,PowerOnly,2377,Keep at 38°F,18844,Paper Products,15,1297,53x102x110
+L0149,"Richmond,VA","Charlotte,NC",2025-08-03T13:00,2025-08-05T06:00,Reefer,3141,High value—call before delivery,42123,Produce,22,320,45x96x90
+L7088,"Newark,NJ","San Diego,CA",2025-08-03T22:00,2025-08-05T18:00,PowerOnly,3189,Tarps required,44647,Steel Coils,17,1351,53x102x110
+L5744,"Phoenix,AZ","Newark,NJ",2025-08-05T12:00,2025-08-06T06:00,Reefer,3959,Tarps required,22747,Steel Coils,15,1758,53x102x110
+L9630,"Memphis,TN","Raleigh,NC",2025-08-03T14:00,2025-08-05T08:00,Flatbed,3614,No hazmat,32739,Electronics,30,552,45x96x90
+L3378,"Chicago,IL","Columbus,OH",2025-08-04T06:00,2025-08-05T05:00,PowerOnly,2893,No hazmat,23529,Steel Coils,22,806,45x96x90
+L6801,"Baltimore,MD","Orlando,FL",2025-08-06T01:00,2025-08-07T17:00,Reefer,2364,Tarps required,33320,Frozen Food,14,476,48x102x96
+L0388,"Las Vegas,NV","Dallas,TX",2025-08-04T01:00,2025-08-05T12:00,PowerOnly,3258,Keep at 38°F,29405,Frozen Food,29,440,48x102x96
+L0773,"Phoenix,AZ","Miami,FL",2025-08-05T08:00,2025-08-06T03:00,Stepdeck,2078,,40800,General Goods,15,1343,40x100x100
+L1390,"Boston,MA","Denver,CO",2025-08-05T15:00,2025-08-07T11:00,Van,3724,High value—call before delivery,16593,Produce,38,731,53x102x110
+L8857,"Columbus,OH","Nashville,TN",2025-08-07T01:00,2025-08-08T07:00,Reefer,2422,High value—call before delivery,15293,Steel Coils,30,1410,53x102x110
+L9430,"Denver,CO","Detroit,MI",2025-08-03T10:00,2025-08-05T03:00,Van,3304,High value—call before delivery,27476,Frozen Food,22,789,40x100x100
+L5775,"Las Vegas,NV","Los Angeles,CA",2025-08-05T02:00,2025-08-05T21:00,Reefer,2948,High value—call before delivery,37853,Produce,23,938,40x100x100
+L1318,"San Diego,CA","Kansas City,MO",2025-08-05T21:00,2025-08-07T20:00,Van,3925,Keep at 38°F,29806,Produce,26,1487,45x96x90
+L2070,"San Diego,CA","Newark,NJ",2025-08-06T11:00,2025-08-07T23:00,Van,2159,Tarps required,15936,Furniture,27,421,53x102x110
+L9689,"Baltimore,MD","Portland,OR",2025-08-04T00:00,2025-08-05T00:00,Reefer,2949,Tarps required,24438,Paper Products,19,835,48x102x96
+L1308,"Raleigh,NC","Indianapolis,IN",2025-08-06T18:00,2025-08-07T21:00,Reefer,2909,No hazmat,44754,Paper Products,23,437,40x100x100
+L8408,"Memphis,TN","Miami,FL",2025-08-06T01:00,2025-08-07T19:00,Stepdeck,2359,Tarps required,38610,Paper Products,23,918,53x102x110
+L3923,"Orlando,FL","St. Louis,MO",2025-08-06T05:00,2025-08-07T14:00,Van,3031,High value—call before delivery,36617,General Goods,27,405,40x100x100
+L3925,"Salt Lake City,UT","Baltimore,MD",2025-08-06T17:00,2025-08-08T13:00,PowerOnly,3310,Keep at 38°F,25835,Frozen Food,12,1044,45x96x90
+L4622,"Memphis,TN","Chicago,IL",2025-08-04T01:00,2025-08-05T16:00,Reefer,1883,Keep at 38°F,24701,General Goods,37,425,45x96x90
+L7957,"Pittsburgh,PA","Atlanta,GA",2025-08-03T13:00,2025-08-05T02:00,Reefer,1529,,22464,Furniture,39,612,45x96x90
+L5048,"Raleigh,NC","Houston,TX",2025-08-03T21:00,2025-08-05T04:00,PowerOnly,3714,No hazmat,30542,General Goods,35,1979,45x96x90
+L0652,"Baltimore,MD","Seattle,WA",2025-08-06T06:00,2025-08-07T16:00,Stepdeck,2843,Tarps required,34538,Paper Products,20,1936,45x96x90
+L8368,"Dallas,TX","Memphis,TN",2025-08-03T13:00,2025-08-04T23:00,Reefer,3284,Tarps required,26769,Steel Coils,30,419,40x100x100
+L9619,"Tampa,FL","Salt Lake City,UT",2025-08-04T03:00,2025-08-05T07:00,Flatbed,2861,No hazmat,24692,General Goods,17,858,40x100x100
+L3662,"Detroit,MI","Denver,CO",2025-08-04T15:00,2025-08-05T15:00,Reefer,3985,,40743,Paper Products,7,1328,48x102x96

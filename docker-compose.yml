@@ -1,0 +1,14 @@
+services:
+  api:
+    image: inbound-carrier          # image you just built
+    build:
+      context: .                    # optional; lets you run `docker compose up --build`
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data   # so /app/data/loads.csv exists in the container
+    environment:
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
