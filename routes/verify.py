@@ -1,16 +1,14 @@
-import os
-import httpx
-from fastapi import APIRouter, HTTPException, Query
+import os, re
+import requests
+from fastapi import APIRouter
 from pydantic import BaseModel, Field
 from dotenv import load_dotenv
+
 load_dotenv()
 
 router = APIRouter(prefix="/verify-mc", tags=["carriers"])
 
-FMCSA_URL = (
-    "https://mobile.fmcsa.dot.gov/qc/services/carriers/docket-number/"
-    "{mc}?webKey={key}"
-)
+# ────────────────────────────── ENV SETUP ────────────────────────────────────
 WEBKEY = os.getenv("FMCSA_WEBKEY")  # set this in production
 
 
@@ -24,41 +22,68 @@ class VerifyResp(BaseModel):
 
 # ---------- route -------------------------------------------------------------
 @router.get("", response_model=VerifyResp)
-async def verify_mc(
-    mc_number: str = Query(..., regex=r"^\d{3,7}$", description="Carrier MC #")
-):
+def verify_mc(mc_number: str | int,
+              webkey: str,
+              timeout: int = 10) -> dict:
     """
-    Look up the carrier in FMCSA.  If FMCSA_WEBKEY is not configured, return a
-    mock success response so the PoC keeps working.
+    Look up an MC docket number via FMCSA QCMobile and return a
+    compact status block.
+
+    Returns
+    -------
+    dict with keys:
+        mc_number     str   – digits only
+        eligible      bool  – True if carrier record found
+        status        str   – 'SUCCESS', 'NOT_FOUND', or API error message
+        carrier_name  str|None
     """
-    if not WEBKEY:
-        # ----- demo fallback -----
+    # 1. sanitise MC -> digits only
+    mc_number = re.sub(r"\D", "", str(mc_number))
+    url = f"https://mobile.fmcsa.dot.gov/qc/services/carriers/docket-number/{mc_number}"
+
+    try:
+        resp  = requests.get(url,
+                             params={"webKey": webkey},
+                             timeout=timeout)
+        data  = resp.json()          # may be list, dict, or []
+    except Exception as exc:         # network or JSON error
         return {
             "mc_number": mc_number,
-            "eligible": True,
-            "status": "MOCK_SUCCESS",
-            "carrier_name": "Demo Carrier Inc.",
+            "eligible":  False,
+            "status":    f"REQUEST_ERROR: {exc}",
+            "carrier_name": None,
         }
 
-    # url = FMCSA_URL.format(mc=mc_number, key=WEBKEY)
-    # async with httpx.AsyncClient(timeout=10) as client:
-    #     r = await client.get(url)
+    # 2. locate the carrier block regardless of wrapper
+    carrier = None
+    if isinstance(data, list) and data:
+        carrier = data[0]
+    elif isinstance(data, dict):
+        if "content" in data and data["content"]:
+            carrier = data["content"][0].get("carrier") \
+                      or data["content"][0]
+        elif "carrier" in data:
+            carrier = data["carrier"]
 
-    # if r.status_code != 200:
-    #     raise HTTPException(r.status_code, "FMCSA lookup failed")
+    # 3. build return payload
+    if carrier:
+        name = (carrier.get("legalName")
+                or carrier.get("dbaName")
+                or carrier.get("entityName"))
+        return {
+            "mc_number": mc_number,
+            "eligible":  True,
+            "status":    "SUCCESS",
+            "carrier_name": name,
+        }
 
-    # data = r.json()
-    # eligible = bool(data)
-    # name = data[0]["legalName"] if eligible else None
-    # return {
-    #     "mc_number": mc_number,
-    #     "eligible": eligible,
-    #     "status": "SUCCESS" if eligible else "NOT_FOUND",
-    #     "carrier_name": name,
-    # }
+    # fall-back: empty list or explicit error dict
+    status_msg = ("NOT_FOUND"
+                  if not isinstance(data, dict)
+                  else data.get("errorMessage", "NOT_FOUND"))
     return {
         "mc_number": mc_number,
-        "eligible": True,
-        "status": "SUCCESS",
-        "carrier_name": 'XYZ Trucking Co.',
+        "eligible":  False,
+        "status":    status_msg,
+        "carrier_name": None,
     }
