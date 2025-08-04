@@ -79,7 +79,7 @@ def search_loads(
     
     # Convert pandas.Timestamp → built-in datetime for Pydantic v2 validation.
     for col in ("pickup_datetime", "delivery_datetime"):
-        matches[col] = matches[col].dt.tz_localize(None).dt.to_pydatetime()
+        matches[col] = (matches[col].dt.tz_localize(None).dt.to_pydatetime())
 
     return {"loads": matches.to_dict(orient="records")}
 
