@@ -31,14 +31,14 @@ async def verify_mc(
     Look up the carrier in FMCSA.  If FMCSA_WEBKEY is not configured, return a
     mock success response so the PoC keeps working.
     """
-    # if not WEBKEY:
-    #     # ----- demo fallback -----
-    #     return {
-    #         "mc_number": mc_number,
-    #         "eligible": True,
-    #         "status": "MOCK_SUCCESS",
-    #         "carrier_name": "Demo Carrier Inc.",
-    #     }
+    if not WEBKEY:
+        # ----- demo fallback -----
+        return {
+            "mc_number": mc_number,
+            "eligible": True,
+            "status": "MOCK_SUCCESS",
+            "carrier_name": "Demo Carrier Inc.",
+        }
 
     # url = FMCSA_URL.format(mc=mc_number, key=WEBKEY)
     # async with httpx.AsyncClient(timeout=10) as client:

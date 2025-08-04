@@ -76,7 +76,7 @@ import pandas as pd
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from dotenv import load_dotenv
-from .negotiate_graph import run_negotiation
+from routes.negotiate_graph import run_negotiation
 
 load_dotenv()
 

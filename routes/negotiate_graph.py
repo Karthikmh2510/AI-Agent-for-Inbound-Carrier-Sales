@@ -142,6 +142,15 @@ def evaluate(state: NegotiationState) -> NegotiationState:
     if not result:
         result = deterministic_round(board, offer, tries)
 
+    # Ensure the JSON always contains a numeric target_rate
+    if result.get("target_rate") is None:
+        if result["status"] == "accept":
+            result["target_rate"] = offer          # accepted at caller’s price
+        else:  # "counter" or "reject" missing a rate → use board_rate
+            result["target_rate"] = board
+    # (optional) coerce to float to satisfy Pydantic strictly
+    result["target_rate"] = float(result["target_rate"])
+
     next_state = state.copy()
     next_state["result"] = result
 
