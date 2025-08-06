@@ -67,6 +67,9 @@ def search_loads(
     (case-insensitive).  You can replace this with full-text or SQL later.
     """
     df = load_df()
+    origin = origin.replace(", ", ",").strip()
+    destination = destination.replace(", ", ",").strip()
+    equipment_type = equipment_type.strip()
     mask = (
         df.origin.str.contains(origin, case=False, na=False)
         & df.destination.str.contains(destination, case=False, na=False)
