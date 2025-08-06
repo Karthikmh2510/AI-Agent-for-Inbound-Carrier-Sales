@@ -75,7 +75,7 @@ def search_loads(
     matches = df[mask].head(limit)
 
     if matches.empty:
-        raise HTTPException(404, detail="No matching loads")
+        return {"loads": []}
     
     # Convert pandas.Timestamp → built-in datetime for Pydantic v2 validation.
     for col in ("pickup_datetime", "delivery_datetime"):
