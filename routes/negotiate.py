@@ -3,7 +3,7 @@ from functools import lru_cache
 import os
 import pandas as pd
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, field_validator
 from dotenv import load_dotenv
 from routes.negotiate_graph import run_negotiation
 
@@ -23,8 +23,16 @@ def rate_lookup() -> pd.Series:
 # ───────────────────────── Pydantic models ────────────────────────────────────
 class OfferIn(BaseModel):
     load_id: str
-    offer: float = Field(..., gt=0)
-    attempts: int = Field(1, ge=1, le=3)
+    offer: float 
+    attempts: int 
+
+    @field_validator("offer", mode="before")
+    @classmethod
+    def sanitize_offer(cls, v):
+        if isinstance(v, str):
+            cleaned = v.replace("$", "").replace(",", "").strip()
+            return float(cleaned)
+        return v
     
 # ────────────────────────── Response model ───────────────────────────────────
 class OfferOut(BaseModel):
