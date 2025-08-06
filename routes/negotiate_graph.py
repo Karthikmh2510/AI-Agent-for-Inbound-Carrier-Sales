@@ -243,19 +243,19 @@ class NegotiationState(TypedDict, total=False):
     attempts: int
     result: dict   # {"status": str, "target_rate": float, "message": str, "handoff": bool, "final": bool}
 
-def _llm_round(board: float, offer: float) -> dict | None:
+def llm_round(board: float, offer: float) -> dict | None:
     if not USE_LLM:
         return None
     prompt = f"""{SYSTEM}
 
-Board rate: {board:.2f}
-Driver offer: {offer:.2f}
+    Board rate: {board:.2f}
+    Driver offer: {offer:.2f}
 
-Rules:
-- Accept if |offer - board| <= {ACCEPT_WITHIN:.2f} * board
-- Counter (toward board) if within {NEGOTIATE_WITHIN:.2f} * board
-- Reject if beyond that band or attempt cap is reached
-"""
+    Rules:
+    - Accept if |offer - board| <= {ACCEPT_WITHIN:.2f} * board
+    - Counter (toward board) if within {NEGOTIATE_WITHIN:.2f} * board
+    - Reject if beyond that band or attempt cap is reached
+    """
     resp = LLM.invoke(prompt)
     text = getattr(resp, "content", str(resp))
     try:
@@ -263,10 +263,11 @@ Rules:
     except Exception:
         return None
 
-def _deterministic_round(board: float, offer: float, attempts: int) -> dict:
+def deterministic_round(board: float, offer: float, attempts: int) -> dict:
     gap = offer - board
     abs_pct = abs(gap) / board if board > 0 else 1.0
-    # Accept band → handoff
+
+    # Accept in tight band
     if abs_pct <= ACCEPT_WITHIN:
         return {
             "status": "accept",
@@ -275,8 +276,30 @@ def _deterministic_round(board: float, offer: float, attempts: int) -> dict:
             "handoff": True,
             "final": True,
         }
-    # Attempt cap reached → reject
-    if attempts >= MAX_ATTEMPTS:
+
+    # Concession schedule & high-side caps (as % over board), tapered by attempt
+    step = COUNTER_STEPS[min(max(attempts, 1) - 1, len(COUNTER_STEPS) - 1)]
+    HIGH_CAPS = [0.25, 0.18, 0.12]  # attempt 1/2/3 → +25%, +18%, +12% over board
+    high_cap = HIGH_CAPS[min(max(attempts, 1) - 1, len(HIGH_CAPS) - 1)]
+    high_ceiling = board * (1 + high_cap)
+
+    if gap >= 0:
+        # Driver ABOVE board: always counter, but clamp near board
+        soft_target = offer - board * step           # move down a bit
+        target = float(round(min(soft_target, high_ceiling)))
+        status = "counter"
+    else:
+        # Driver BELOW board: negotiate only if not an extreme lowball
+        low_pct = (board - offer) / board if board > 0 else 1.0
+        if low_pct <= NEGOTIATE_WITHIN:
+            target = float(round(offer + board * step))
+            status = "counter"
+        else:
+            target = float(round(board))
+            status = "reject"
+
+    # Enforce attempt cap AFTER deciding
+    if status == "counter" and attempts >= MAX_ATTEMPTS:
         return {
             "status": "reject",
             "target_rate": float(round(board)),
@@ -284,15 +307,8 @@ def _deterministic_round(board: float, offer: float, attempts: int) -> dict:
             "handoff": False,
             "final": True,
         }
-    # Inside negotiate band → counter (move toward board by a fixed step)
-    if abs_pct <= NEGOTIATE_WITHIN:
-        step = COUNTER_STEPS[min(attempts - 1, len(COUNTER_STEPS) - 1)]
-        # Move a step *toward* the board
-        if gap > 0:    # offer above board → move down
-            target = offer - board * step
-        else:          # offer below board → move up
-            target = offer + board * step
-        target = float(round(target))
+
+    if status == "counter":
         return {
             "status": "counter",
             "target_rate": target,
@@ -300,7 +316,7 @@ def _deterministic_round(board: float, offer: float, attempts: int) -> dict:
             "handoff": False,
             "final": False,
         }
-    # Outside negotiate band → reject
+
     return {
         "status": "reject",
         "target_rate": float(round(board)),
@@ -311,7 +327,7 @@ def _deterministic_round(board: float, offer: float, attempts: int) -> dict:
 
 def evaluate(state: NegotiationState) -> NegotiationState:
     board, offer, tries = state["board_rate"], state["offer"], state["attempts"]
-    result = _llm_round(board, offer) or _deterministic_round(board, offer, tries)
+    result = llm_round(board, offer) or deterministic_round(board, offer, tries)
 
     # Normalize
     result["target_rate"] = float(result.get("target_rate", offer))
