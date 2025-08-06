@@ -110,7 +110,7 @@ def deterministic_round(board_rate: int, offer: float, tries: int) -> dict:
 
     # Counter
     if diff <= MAX_COUNTER_DIFF and tries < MAX_ATTEMPTS:
-        tgt = offer + board_rate * COUNTER_STEP
+        tgt = round(offer + board_rate * COUNTER_STEP)
         return {
             "status": "counter",
             "target_rate": round(tgt, 2),

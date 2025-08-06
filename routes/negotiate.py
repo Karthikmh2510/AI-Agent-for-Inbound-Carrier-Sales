@@ -1,9 +1,9 @@
 
 from functools import lru_cache
-import os
+import os, re
 import pandas as pd
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from dotenv import load_dotenv
 from routes.negotiate_graph import run_negotiation
 
@@ -26,6 +26,16 @@ class OfferIn(BaseModel):
     offer: float = Field(..., gt=0)
     attempts: int = Field(1, ge=1, le=3)
 
+    @field_validator("offer", mode="before")
+    def coerce_offer(cls, v):
+        if isinstance(v, (int, float)): 
+            return v
+        if isinstance(v, str):
+            v = re.sub(r"[^\d.]", "", v)  # strip $ , spaces
+            return float(v) if v else None
+        return v
+    
+# ────────────────────────── Response model ───────────────────────────────────
 class OfferOut(BaseModel):
     status: str            # "accept", "counter", or "reject"
     target_rate: float
