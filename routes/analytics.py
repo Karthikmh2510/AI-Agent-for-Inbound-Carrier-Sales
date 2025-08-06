@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from typing import Optional
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
@@ -8,13 +8,21 @@ router = APIRouter(prefix="/analytics", tags=["analytics"])
 class CallAnalytics(BaseModel):
     carrier_name: Optional[str]
     mc_number: Optional[str]
-    offer_amount: Optional[float]
-    counter_offer_amount: Optional[float]
-    final_rate: Optional[float]
+    offer_amount: float
+    counter_offer_amount: float
+    final_rate: float
     negotiation_outcome: Optional[str]
     call_outcome: Optional[str]
     sentiment: Optional[str]
 
+    @field_validator('offer_amount', 'counter_offer_amount', 'final_rate', mode='before')
+    def sanitize_currency(cls, v):
+        if isinstance(v, str):
+            # Remove $ and commas before conversion
+            clean = v.replace('$', '').replace(',', '')
+            return float(clean)
+        return v
+    
 # Step 2: Create POST endpoint to receive data
 @router.post("", response_model=CallAnalytics)
 async def receive_call_data(data: CallAnalytics) -> CallAnalytics:
