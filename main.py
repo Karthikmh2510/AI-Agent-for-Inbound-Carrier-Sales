@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 from routes.loads import router as loads_router
 from routes.verify import router as verify_router
 from routes.negotiate import router as negotiate_router
+from routes.analytics import router as analytics_router
 
 load_dotenv()
 
@@ -37,6 +38,7 @@ async def api_key_auth(request: Request, call_next):
 app.include_router(loads_router)
 app.include_router(verify_router)
 app.include_router(negotiate_router)
+app.include_router(analytics_router)
 
 # ── health-check ─────────────────────────────────────────────────────────────
 @app.get("/ping")

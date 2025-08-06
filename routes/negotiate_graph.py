@@ -327,19 +327,19 @@ def deterministic_round(board: float, offer: float, attempts: int) -> dict:
     }
 
 def evaluate(state: NegotiationState) -> NegotiationState:
-    board = state["board_rate"]
-    driver_offer = state["offer"]
-    tries = state["attempts"]
+    board, offer = state["board_rate"], state["offer"]
+    tries = state.get("attempts", 1)
 
-    result = deterministic_round(board, driver_offer, tries)
-    result["target_rate"] = float(result["target_rate"])
-    result["attempts"] = tries
+    # Run the negotiation logic
+    result = deterministic_round(board, offer, tries)
 
-    return {
-        **state,
-        "last_driver_offer": driver_offer,  # store for logging or use
-        "result": result
-    }
+    # Ensure you return the updated attempts count
+    updated_attempts = tries + 1 if result["status"] == "counter" else tries
+
+    out = state.copy()
+    out["attempts"] = updated_attempts  # increment here
+    out["result"] = result
+    return out
 
 flow = StateGraph(NegotiationState, name="NegotiationSingleRound")
 flow.add_node("Evaluate", evaluate)
@@ -354,4 +354,7 @@ def run_negotiation(board_rate: float, initial_offer: float, attempts: int = 1) 
         "attempts": int(attempts),
     }
     final_state = NEGOTIATION_GRAPH.invoke(init)
+    res = final_state["result"]
+    res["attempts"] = final_state["attempts"]  # fetch updated state attempts
+    return res
     return final_state["result"]
