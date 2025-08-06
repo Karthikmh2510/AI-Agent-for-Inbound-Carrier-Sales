@@ -59,18 +59,16 @@ class NegotiationState(TypedDict, total=False):
 
 # ───────────────────────── LLM PROMPT TEMPLATE ───────────────────────────────
 SYSTEM_PROMPT = """
-You are “AcmeBot,” an expert freight broker negotiating spot-market rates.
+You are an expert freight broker negotiating spot-market rates.
 
 • Board (posted) rate ............... {board_rate}
 • Driver’s current offer ............ {offer}
-• You may make at most three counter-rounds total.
 • All money values are whole US dollars (no cents).
 
 Decision rules
-1. **accept**  – If the driver’s offer is ≤ 15 % below board.
-2. **counter** – If offer is > 15 % and ≤ 30 % below board.
-   Your counter must be offer + 5 % × board rate, rounded to whole dollars.
-3. **reject**  – If offer is > 30 % below board OR would exceed 3 rounds.
+- accept if offer is ≤ 15% below the board rate
+- counter (offer + 5% * board) if >15% and ≤30% below board
+- reject if >30% below board
 
 Return **ONLY valid JSON** with keys: status, target_rate, message.
 """
@@ -150,35 +148,35 @@ def evaluate(state: NegotiationState) -> NegotiationState:
             result["target_rate"] = board
     # (optional) coerce to float to satisfy Pydantic strictly
     result["target_rate"] = float(result["target_rate"])
+    result["attempts"] = tries
 
-    next_state = state.copy()
-    next_state["result"] = result
+    out = state.copy()
+    out["result"] = result
+    return out
 
-    # prepare for another counter round
-    if result["status"] == "counter":
-        next_state["offer"] = result["target_rate"]
-        next_state["attempts"] = tries + 1
+# def router(state: NegotiationState) -> Literal["accept", "reject", "counter"]:
+#     """Direct LangGraph edge based on result status & attempt cap."""
+#     status, attempts = state["result"]["status"], state["attempts"]
+#     if status == "counter" and attempts > MAX_ATTEMPTS:
+#         return "reject"
+#     return status
 
-    return next_state
+# # ────────────────────────── BUILD THE LANGGRAPH ──────────────────────────────
+# flow = StateGraph(NegotiationState, name="AgenticNegotiation")
+# flow.add_node("Evaluate", evaluate)
+# flow.add_edge(START, "Evaluate")
+# flow.add_conditional_edges(
+#     "Evaluate",
+#     router,
+#     {"accept": END, "reject": END, "counter": "Evaluate"},
+# )
+# NEGOTIATION_GRAPH = flow.compile()
 
-def router(state: NegotiationState) -> Literal["accept", "reject", "counter"]:
-    """Direct LangGraph edge based on result status & attempt cap."""
-    status, attempts = state["result"]["status"], state["attempts"]
-    if status == "counter" and attempts > MAX_ATTEMPTS:
-        return "reject"
-    return status
-
-# ────────────────────────── BUILD THE LANGGRAPH ──────────────────────────────
-flow = StateGraph(NegotiationState, name="AgenticNegotiation")
+flow = StateGraph(NegotiationState, name="NegotiationSingleRound")
 flow.add_node("Evaluate", evaluate)
 flow.add_edge(START, "Evaluate")
-flow.add_conditional_edges(
-    "Evaluate",
-    router,
-    {"accept": END, "reject": END, "counter": "Evaluate"},
-)
+flow.add_edge("Evaluate", END)
 NEGOTIATION_GRAPH = flow.compile()
-
 # ───────────────────────── PUBLIC RUNNER FUNC ────────────────────────────────
 def run_negotiation(
     board_rate: int,
