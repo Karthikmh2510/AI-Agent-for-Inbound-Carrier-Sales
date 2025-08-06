@@ -1,209 +1,337 @@
+# """
+# routes/negotiate_graph.py
+# ───────────────────────────────────────────────────────────────────────────────
+# Negotiation rules:
+# - Accept if |offer - board| <= ACCEPT_WITHIN * board  → handoff to human
+# - Counter if within NEGOTIATE_WITHIN * board         → up to MAX_ATTEMPTS
+# - Reject otherwise or if attempts hit MAX_ATTEMPTS
+# """
+
+# from __future__ import annotations
+
+# import json
+# import os
+# from typing import Literal, TypedDict
+
+# from dotenv import load_dotenv
+# from langgraph.graph import END, START, StateGraph
+# from langchain_core.prompts import ChatPromptTemplate
+# from langchain_openai import ChatOpenAI
+
+# # ────────────────────────────── ENV / LLM SETUP ──────────────────────────────
+# load_dotenv()
+# OPENAI_KEY = os.getenv("OPENAI_API_KEY")
+
+# USE_LLM = bool(OPENAI_KEY)  # Toggle automatically
+
+# if USE_LLM:
+#     LLM = ChatOpenAI(
+#         model="gpt-4o-mini",
+#         api_key=OPENAI_KEY,
+#         temperature=0.2,
+#     )
+
+# # ──────────────────────────── BUSINESS CONSTANTS ─────────────────────────────
+# MAX_MARGIN = 0.15        # accept if ≤ 15 % below board rate
+# MAX_COUNTER_DIFF = 0.30  # counter if ≤ 30 % below board rate
+# COUNTER_STEP = 0.05       # counter = offer + 5 % × board_rate
+# MAX_ATTEMPTS = 3          # hard stop after 3 rounds
+
+# # ───────────────────────────── STATE SCHEMA ──────────────────────────────────
+# class NegotiationState(TypedDict, total=False):
+#     board_rate: int
+#     offer: float
+#     attempts: int
+#     result: dict   # {"status": str, "target_rate": float, "message": str}
+
+# # ───────────────────────── LLM PROMPT TEMPLATE ───────────────────────────────
+# SYSTEM_PROMPT = """
+# You are an expert freight broker negotiating spot-market rates.
+
+# • Board (posted) rate ............... {board_rate}
+# • Driver’s current offer ............ {offer}
+# • All money values are whole US dollars (no cents).
+
+# Decision rules
+# - accept if offer is ≤ 15% below the board rate
+# - counter (offer + 5% * board) if >15% and ≤30% below board
+# - reject if >30% below board
+
+# Return **ONLY valid JSON** with keys: status, target_rate, message.
+# """
+
+# PROMPT = ChatPromptTemplate.from_messages(
+#     [
+#         ("system", SYSTEM_PROMPT),
+#         ("human", "Board rate: {board_rate}  \nCurrent offer: {offer}"),
+#     ]
+# )
+
+# # ─────────────────── HELPER – ONE LLM NEGOTIATION ROUND ──────────────────────
+# def llm_round(board_rate: int, offer: float) -> dict:
+#     """
+#     Ask the LLM to evaluate a single negotiation round.
+#     Returns a JSON-dict or raises ValueError on bad JSON.
+#     """
+#     messages = PROMPT.format_messages(board_rate=board_rate, offer=offer)
+#     resp = LLM.invoke(messages)  # type: ignore[arg-type]  (depends on SDK)
+
+#     text = resp.content if hasattr(resp, "content") else str(resp)
+#     try:
+#         return json.loads(text)
+#     except Exception as exc:
+#         raise ValueError(f"LLM returned non-JSON: {text!r}") from exc
+
+# # ───────────────────── RULE-BASED FALLBACK ROUND ─────────────────────────────
+# def deterministic_round(board_rate: int, offer: float, tries: int) -> dict:
+#     """Simple math fallback if no LLM key or parsing error."""
+#     diff = (board_rate - offer) / board_rate
+
+#     # Accept
+#     if diff <= MAX_MARGIN:
+#         return {
+#             "status": "accept",
+#             "target_rate": offer,
+#             "message": f"Understood. We can confirm at ${offer:,.0f}.",
+#         }
+
+#     # Counter
+#     if diff <= MAX_COUNTER_DIFF and tries < MAX_ATTEMPTS:
+#         tgt = round(offer + board_rate * COUNTER_STEP)
+#         return {
+#             "status": "counter",
+#             "target_rate": round(tgt, 2),
+#             "message": f"I can do ${tgt:,.0f}. Does that work?",
+#         }
+
+#     # Reject
+#     return {
+#         "status": "reject",
+#         "target_rate": board_rate,
+#         "message": "We’re too far apart on rate for this load.",
+#     }
+
+# # ────────────────────────── GRAPH NODE LOGIC ─────────────────────────────────
+# def evaluate(state: NegotiationState) -> NegotiationState:
+#     """
+#     Graph node: run one negotiation round (LLM or deterministic),
+#     then update the NegotiationState.
+#     """
+#     board, offer, tries = state["board_rate"], state["offer"], state["attempts"]
+
+#     try:
+#         result = llm_round(board, offer) if USE_LLM else None
+#     except Exception:
+#         result = None  # fallback to deterministic
+
+#     if not result:
+#         result = deterministic_round(board, offer, tries)
+
+#     # Ensure the JSON always contains a numeric target_rate
+#     if result.get("target_rate") is None:
+#         if result["status"] == "accept":
+#             result["target_rate"] = offer          # accepted at caller’s price
+#         else:  # "counter" or "reject" missing a rate → use board_rate
+#             result["target_rate"] = board
+#     # (optional) coerce to float to satisfy Pydantic strictly
+#     result["target_rate"] = float(result["target_rate"])
+#     result["attempts"] = tries
+
+#     out = state.copy()
+#     out["result"] = result
+#     return out
+
+# # def router(state: NegotiationState) -> Literal["accept", "reject", "counter"]:
+# #     """Direct LangGraph edge based on result status & attempt cap."""
+# #     status, attempts = state["result"]["status"], state["attempts"]
+# #     if status == "counter" and attempts > MAX_ATTEMPTS:
+# #         return "reject"
+# #     return status
+
+# # # ────────────────────────── BUILD THE LANGGRAPH ──────────────────────────────
+# # flow = StateGraph(NegotiationState, name="AgenticNegotiation")
+# # flow.add_node("Evaluate", evaluate)
+# # flow.add_edge(START, "Evaluate")
+# # flow.add_conditional_edges(
+# #     "Evaluate",
+# #     router,
+# #     {"accept": END, "reject": END, "counter": "Evaluate"},
+# # )
+# # NEGOTIATION_GRAPH = flow.compile()
+
+# flow = StateGraph(NegotiationState, name="NegotiationSingleRound")
+# flow.add_node("Evaluate", evaluate)
+# flow.add_edge(START, "Evaluate")
+# flow.add_edge("Evaluate", END)
+# NEGOTIATION_GRAPH = flow.compile()
+# # ───────────────────────── PUBLIC RUNNER FUNC ────────────────────────────────
+# def run_negotiation(
+#     board_rate: int,
+#     initial_offer: float,
+#     attempts: int = 1,
+# ) -> dict:
+#     """
+#     High-level helper for FastAPI route.
+
+#     Parameters
+#     ----------
+#     board_rate : int
+#         Posted rate for the load.
+#     initial_offer : float
+#         Carrier’s first offer.
+#     attempts : int, default 1
+#         Current negotiation round (1-based).
+
+#     Returns
+#     -------
+#     dict
+#         {"status": str, "target_rate": float, "message": str}
+#     """
+#     init: NegotiationState = {
+#         "board_rate": board_rate,
+#         "offer": initial_offer,
+#         "attempts": attempts,
+#     }
+#     final_state = NEGOTIATION_GRAPH.invoke(init)
+#     return final_state["result"]
+
 """
 routes/negotiate_graph.py
-───────────────────────────────────────────────────────────────────────────────
-Agentic, LangGraph-driven negotiation engine.
-
-• Supports up to three back-and-forth rounds.
-• Uses an OpenAI chat model when an `OPENAI_API_KEY` is available; otherwise
-  falls back to a deterministic rule-based decision function.
-• Designed to be called from routes/negotiate.py:
-
-      from routes.negotiate_graph import run_negotiation
-      result = run_negotiation(board_rate=2300, initial_offer=2000, attempts=1)
-
-Return value:
-
-    {
-        "status": "accept" | "counter" | "reject",
-        "target_rate": 2175,
-        "message": "Best I can do is $2 175. Does that work?"
-    }
+Negotiation rules:
+- Accept if |offer - board| <= ACCEPT_WITHIN * board  → handoff to human
+- Counter if within NEGOTIATE_WITHIN * board         → up to MAX_ATTEMPTS
+- Reject otherwise or if attempts hit MAX_ATTEMPTS
 """
 
 from __future__ import annotations
-
-import json
-import os
-from typing import Literal, TypedDict
-
+import json, os
+from typing import TypedDict
 from dotenv import load_dotenv
 from langgraph.graph import END, START, StateGraph
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_openai import ChatOpenAI
 
-# ────────────────────────────── ENV / LLM SETUP ──────────────────────────────
+# Optional LLM (kept, but fallback is deterministic)
+try:
+    from langchain_core.prompts import ChatPromptTemplate
+    from langchain_openai import ChatOpenAI
+except Exception:
+    ChatPromptTemplate = None
+    ChatOpenAI = None
+
 load_dotenv()
-OPENAI_KEY = os.getenv("OPENAI_API_KEY")
 
-USE_LLM = bool(OPENAI_KEY)  # Toggle automatically
+OPENAI_KEY = os.getenv("OPENAI_API_KEY")
+USE_LLM = bool(OPENAI_KEY and ChatOpenAI is not None)
+
+# ---------- Tunables (env) ----------
+ACCEPT_WITHIN     = float("0.10")  # ±10%
+NEGOTIATE_WITHIN  = float("0.30")# up to ±30%
+MAX_ATTEMPTS      = 3
+# step concessions (as fraction of board) per attempt
+COUNTER_STEPS     = [0.05, 0.08, 0.10]
 
 if USE_LLM:
-    LLM = ChatOpenAI(
-        model="gpt-4o-mini",
-        api_key=OPENAI_KEY,
-        temperature=0.2,
+    LLM = ChatOpenAI(model="gpt-4o-mini", api_key=OPENAI_KEY, temperature=0.2)
+    SYSTEM = (
+        "You are an expert freight broker.\n"
+        "Return JSON with keys: status ('accept'|'counter'|'reject'), "
+        "target_rate (number), message (string). Values are whole US dollars."
     )
 
-# ──────────────────────────── BUSINESS CONSTANTS ─────────────────────────────
-MAX_MARGIN = 0.15        # accept if ≤ 15 % below board rate
-MAX_COUNTER_DIFF = 0.30  # counter if ≤ 30 % below board rate
-COUNTER_STEP = 0.05       # counter = offer + 5 % × board_rate
-MAX_ATTEMPTS = 3          # hard stop after 3 rounds
-
-# ───────────────────────────── STATE SCHEMA ──────────────────────────────────
 class NegotiationState(TypedDict, total=False):
-    board_rate: int
+    board_rate: float
     offer: float
     attempts: int
-    result: dict   # {"status": str, "target_rate": float, "message": str}
+    result: dict   # {"status": str, "target_rate": float, "message": str, "handoff": bool, "final": bool}
 
-# ───────────────────────── LLM PROMPT TEMPLATE ───────────────────────────────
-SYSTEM_PROMPT = """
-You are an expert freight broker negotiating spot-market rates.
+def _llm_round(board: float, offer: float) -> dict | None:
+    if not USE_LLM:
+        return None
+    prompt = f"""{SYSTEM}
 
-• Board (posted) rate ............... {board_rate}
-• Driver’s current offer ............ {offer}
-• All money values are whole US dollars (no cents).
+Board rate: {board:.2f}
+Driver offer: {offer:.2f}
 
-Decision rules
-- accept if offer is ≤ 15% below the board rate
-- counter (offer + 5% * board) if >15% and ≤30% below board
-- reject if >30% below board
-
-Return **ONLY valid JSON** with keys: status, target_rate, message.
+Rules:
+- Accept if |offer - board| <= {ACCEPT_WITHIN:.2f} * board
+- Counter (toward board) if within {NEGOTIATE_WITHIN:.2f} * board
+- Reject if beyond that band or attempt cap is reached
 """
-
-PROMPT = ChatPromptTemplate.from_messages(
-    [
-        ("system", SYSTEM_PROMPT),
-        ("human", "Board rate: {board_rate}  \nCurrent offer: {offer}"),
-    ]
-)
-
-# ─────────────────── HELPER – ONE LLM NEGOTIATION ROUND ──────────────────────
-def llm_round(board_rate: int, offer: float) -> dict:
-    """
-    Ask the LLM to evaluate a single negotiation round.
-    Returns a JSON-dict or raises ValueError on bad JSON.
-    """
-    messages = PROMPT.format_messages(board_rate=board_rate, offer=offer)
-    resp = LLM.invoke(messages)  # type: ignore[arg-type]  (depends on SDK)
-
-    text = resp.content if hasattr(resp, "content") else str(resp)
+    resp = LLM.invoke(prompt)
+    text = getattr(resp, "content", str(resp))
     try:
         return json.loads(text)
-    except Exception as exc:
-        raise ValueError(f"LLM returned non-JSON: {text!r}") from exc
+    except Exception:
+        return None
 
-# ───────────────────── RULE-BASED FALLBACK ROUND ─────────────────────────────
-def deterministic_round(board_rate: int, offer: float, tries: int) -> dict:
-    """Simple math fallback if no LLM key or parsing error."""
-    diff = (board_rate - offer) / board_rate
-
-    # Accept
-    if diff <= MAX_MARGIN:
+def _deterministic_round(board: float, offer: float, attempts: int) -> dict:
+    gap = offer - board
+    abs_pct = abs(gap) / board if board > 0 else 1.0
+    # Accept band → handoff
+    if abs_pct <= ACCEPT_WITHIN:
         return {
             "status": "accept",
-            "target_rate": offer,
-            "message": f"Understood. We can confirm at ${offer:,.0f}.",
+            "target_rate": float(round(offer)),
+            "message": f"Sounds good. Confirming at ${round(offer):,}. Transferring you to a human rep.",
+            "handoff": True,
+            "final": True,
         }
-
-    # Counter
-    if diff <= MAX_COUNTER_DIFF and tries < MAX_ATTEMPTS:
-        tgt = round(offer + board_rate * COUNTER_STEP)
+    # Attempt cap reached → reject
+    if attempts >= MAX_ATTEMPTS:
+        return {
+            "status": "reject",
+            "target_rate": float(round(board)),
+            "message": "I appreciate the negotiation. We’re not aligned on rate, so I’ll have to pass this time.",
+            "handoff": False,
+            "final": True,
+        }
+    # Inside negotiate band → counter (move toward board by a fixed step)
+    if abs_pct <= NEGOTIATE_WITHIN:
+        step = COUNTER_STEPS[min(attempts - 1, len(COUNTER_STEPS) - 1)]
+        # Move a step *toward* the board
+        if gap > 0:    # offer above board → move down
+            target = offer - board * step
+        else:          # offer below board → move up
+            target = offer + board * step
+        target = float(round(target))
         return {
             "status": "counter",
-            "target_rate": round(tgt, 2),
-            "message": f"I can do ${tgt:,.0f}. Does that work?",
+            "target_rate": target,
+            "message": f"I can do ${int(target):,}. Does that work?",
+            "handoff": False,
+            "final": False,
         }
-
-    # Reject
+    # Outside negotiate band → reject
     return {
         "status": "reject",
-        "target_rate": board_rate,
+        "target_rate": float(round(board)),
         "message": "We’re too far apart on rate for this load.",
+        "handoff": False,
+        "final": True,
     }
 
-# ────────────────────────── GRAPH NODE LOGIC ─────────────────────────────────
 def evaluate(state: NegotiationState) -> NegotiationState:
-    """
-    Graph node: run one negotiation round (LLM or deterministic),
-    then update the NegotiationState.
-    """
     board, offer, tries = state["board_rate"], state["offer"], state["attempts"]
+    result = _llm_round(board, offer) or _deterministic_round(board, offer, tries)
 
-    try:
-        result = llm_round(board, offer) if USE_LLM else None
-    except Exception:
-        result = None  # fallback to deterministic
-
-    if not result:
-        result = deterministic_round(board, offer, tries)
-
-    # Ensure the JSON always contains a numeric target_rate
-    if result.get("target_rate") is None:
-        if result["status"] == "accept":
-            result["target_rate"] = offer          # accepted at caller’s price
-        else:  # "counter" or "reject" missing a rate → use board_rate
-            result["target_rate"] = board
-    # (optional) coerce to float to satisfy Pydantic strictly
-    result["target_rate"] = float(result["target_rate"])
+    # Normalize
+    result["target_rate"] = float(result.get("target_rate", offer))
     result["attempts"] = tries
 
-    out = state.copy()
+    out = dict(state)
     out["result"] = result
     return out
-
-# def router(state: NegotiationState) -> Literal["accept", "reject", "counter"]:
-#     """Direct LangGraph edge based on result status & attempt cap."""
-#     status, attempts = state["result"]["status"], state["attempts"]
-#     if status == "counter" and attempts > MAX_ATTEMPTS:
-#         return "reject"
-#     return status
-
-# # ────────────────────────── BUILD THE LANGGRAPH ──────────────────────────────
-# flow = StateGraph(NegotiationState, name="AgenticNegotiation")
-# flow.add_node("Evaluate", evaluate)
-# flow.add_edge(START, "Evaluate")
-# flow.add_conditional_edges(
-#     "Evaluate",
-#     router,
-#     {"accept": END, "reject": END, "counter": "Evaluate"},
-# )
-# NEGOTIATION_GRAPH = flow.compile()
 
 flow = StateGraph(NegotiationState, name="NegotiationSingleRound")
 flow.add_node("Evaluate", evaluate)
 flow.add_edge(START, "Evaluate")
 flow.add_edge("Evaluate", END)
 NEGOTIATION_GRAPH = flow.compile()
-# ───────────────────────── PUBLIC RUNNER FUNC ────────────────────────────────
-def run_negotiation(
-    board_rate: int,
-    initial_offer: float,
-    attempts: int = 1,
-) -> dict:
-    """
-    High-level helper for FastAPI route.
 
-    Parameters
-    ----------
-    board_rate : int
-        Posted rate for the load.
-    initial_offer : float
-        Carrier’s first offer.
-    attempts : int, default 1
-        Current negotiation round (1-based).
-
-    Returns
-    -------
-    dict
-        {"status": str, "target_rate": float, "message": str}
-    """
+def run_negotiation(board_rate: float, initial_offer: float, attempts: int = 1) -> dict:
     init: NegotiationState = {
-        "board_rate": board_rate,
-        "offer": initial_offer,
-        "attempts": attempts,
+        "board_rate": float(board_rate),
+        "offer": float(initial_offer),
+        "attempts": int(attempts),
     }
     final_state = NEGOTIATION_GRAPH.invoke(init)
     return final_state["result"]

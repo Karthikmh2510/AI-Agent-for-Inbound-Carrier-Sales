@@ -32,6 +32,8 @@ class OfferOut(BaseModel):
     target_rate: float
     message: str
     attempts: int          # echo back so the agent can track rounds
+    handoff: bool        # True => transfer to human rep now
+    final: bool          # True => terminal (accept/reject or max attempts)
 
 # ───────────────────────── route ------------------------------------------------
 @router.post("", response_model=OfferOut)
@@ -47,4 +49,8 @@ def evaluate_offer(payload: OfferIn):
         initial_offer=payload.offer,
         attempts=payload.attempts
     )
+    # ensure required keys present
+    result.setdefault("handoff", result.get("status") == "accept")
+    result.setdefault("final",   result.get("status") in ("accept", "reject"))
+    result["attempts"] = payload.attempts
     return result
