@@ -14,7 +14,7 @@ WEBKEY = os.getenv("FMCSA_WEBKEY")  # set this in production
 
 # ---------- response model ----------------------------------------------------
 class VerifyResp(BaseModel):
-    mc_number: str = Field(..., example="123456")
+    mc_number: str = Field(...)
     eligible: bool
     status: str
     carrier_name: str | None = None

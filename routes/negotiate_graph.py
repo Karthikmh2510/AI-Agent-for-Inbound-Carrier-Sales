@@ -240,6 +240,7 @@ if USE_LLM:
 class NegotiationState(TypedDict, total=False):
     board_rate: float
     offer: float
+    last_driver_offer: float   # new field to remember it
     attempts: int
     result: dict   # {"status": str, "target_rate": float, "message": str, "handoff": bool, "final": bool}
 
@@ -326,16 +327,19 @@ def deterministic_round(board: float, offer: float, attempts: int) -> dict:
     }
 
 def evaluate(state: NegotiationState) -> NegotiationState:
-    board, offer, tries = state["board_rate"], state["offer"], state["attempts"]
-    result = llm_round(board, offer) or deterministic_round(board, offer, tries)
+    board = state["board_rate"]
+    driver_offer = state["offer"]
+    tries = state["attempts"]
 
-    # Normalize
-    result["target_rate"] = float(result.get("target_rate", offer))
+    result = deterministic_round(board, driver_offer, tries)
+    result["target_rate"] = float(result["target_rate"])
     result["attempts"] = tries
 
-    out = dict(state)
-    out["result"] = result
-    return out
+    return {
+        **state,
+        "last_driver_offer": driver_offer,  # store for logging or use
+        "result": result
+    }
 
 flow = StateGraph(NegotiationState, name="NegotiationSingleRound")
 flow.add_node("Evaluate", evaluate)
