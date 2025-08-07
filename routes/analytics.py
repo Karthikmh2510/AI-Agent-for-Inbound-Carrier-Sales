@@ -4,7 +4,6 @@ GET pops the newest record and immediately discards it.
 Nothing is written to disk or a DB.
 """
 
-import os
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, field_validator
 from typing import Optional, List

@@ -3,7 +3,8 @@ import pandas as pd
 import requests
 import plotly.express as px
 import time, os
-from dotenv import load_dotenv  
+from dotenv import load_dotenv 
+from datetime import datetime 
 load_dotenv()
 
 HAPPYROBOT_REST_API_KEY = os.getenv("HAPPYROBOT_REST_API_KEY")
@@ -17,13 +18,37 @@ st.title("Live Negotiation Metrics Dashboard")
 placeholder = st.empty()
 REFRESH_INTERVAL = 2  # Polling interval
 
-def load_data():
+@st.cache_data(ttl=REFRESH_INTERVAL)
+def load_data_with_timestamp():
     resp = requests.get(f"{API_URL_ANALYTICS}/analytics/events", headers=headers)
     if resp.status_code == 200:
-        return pd.DataFrame(resp.json())
+        df = pd.DataFrame(resp.json())
+        fetch_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        df['fetched_at'] = fetch_time
+        return df
     return pd.DataFrame()
 
-df = load_data()
+with st.spinner("Fetching latest analytics…"):
+    df = load_data_with_timestamp()
+
+if not df.empty:
+    st.subheader("Recent Negotiations")
+    display_cols = [col for col in ["fetched_at", "mc_number", "carrier_name"] if col in df.columns]
+    
+    st.dataframe(
+        df[display_cols].sort_values("fetched_at", ascending=False),
+        use_container_width=True,
+        height=200,
+        column_config={
+            "fetched_at": st.column_config.Column(label="Fetched At"),
+            "mc_number": st.column_config.Column(label="MC Number"),
+            "carrier_name": st.column_config.Column(label="Carrier Name")
+        },
+        key="table_recent"
+    )
+else:
+    st.info("Waiting for data...")
+
 
 if df.empty:
     st.info("Waiting for data...")
