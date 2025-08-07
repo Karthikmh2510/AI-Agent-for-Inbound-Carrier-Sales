@@ -1,84 +1,54 @@
 """
-src/routes/analytics.py
-─────────────────────────────────────────────────────────────
-Stateless relay for call-analytics data:
-
-  • POST /analytics  – HappyRobot sends JSON after each call
-  • GET  /analytics  – next system fetches the record exactly once
-
-No database or file I/O — the latest record lives only in RAM.
+A stateless relay: POST pushes one analytics record into RAM,
+GET pops the newest record and immediately discards it.
+Nothing is written to disk or a DB.
 """
 
-from __future__ import annotations
-
-from datetime import datetime
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel, field_validator
 from typing import Optional
-
-from fastapi import APIRouter, HTTPException, Response, status
-from pydantic import BaseModel, Field, field_validator
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 
-# ──────────────────────
-# 1) Payload schema
-# ──────────────────────
+# Step 1: Define Pydantic data model for validation
 class CallAnalytics(BaseModel):
-    carrier_name:            Optional[str]
-    mc_number:               Optional[str]
-    offer_amount:            float
-    counter_offer_amount:    float
-    final_rate:              float
-    negotiation_outcome:     Optional[str]
-    call_outcome:            Optional[str]
-    sentiment:               Optional[str]
-    timestamp:               str = Field(
-        default_factory=lambda: datetime.now().isoformat()
-    )
+    carrier_name: Optional[str]
+    mc_number: Optional[str]
+    offer_amount: float
+    counter_offer_amount: float
+    final_rate: float
+    negotiation_outcome: Optional[str]
+    call_outcome: Optional[str]
+    sentiment: Optional[str]
 
-    # allow "$2,700" style strings and coerce to float
-    @field_validator("offer_amount", "counter_offer_amount", "final_rate", mode="before")
-    @classmethod
-    def strip_currency(cls, v):
+    @field_validator('offer_amount', 'counter_offer_amount', 'final_rate', mode='before')
+    def sanitize_currency(cls, v):
         if isinstance(v, str):
-            return float(v.replace("$", "").replace(",", "").strip())
+            # Remove $ and commas before conversion
+            clean = v.replace('$', '').replace(',', '')
+            return float(clean)
         return v
+    
+# Step 2: Create POST endpoint to receive data
+@router.post("", response_model=CallAnalytics)
+async def receive_call_data(data: CallAnalytics) -> CallAnalytics:
+    # Example validation: if no outcome, reject
+    if not data.call_outcome:
+        raise HTTPException(status_code=400, detail="Missing call_outcome")
 
+    # Step 3: Process or store the data (e.g., save to DB, log, queue)
+    # For now, just log it
+    json_str = data.model_dump_json()
+    print("Received call analytics:", json_str)
 
-# ──────────────────────
-# 2) In-memory buffer
-# ──────────────────────
-_buffer: Optional[dict] = None  # holds the most-recent record
-
-
-# ──────────────────────
-# 3) POST  /analytics
-# ──────────────────────
-@router.post("", status_code=status.HTTP_204_NO_CONTENT)
-async def push(payload: CallAnalytics) -> Response:
-    """
-    Overwrite the buffer with the newest analytics record.
-    Returns 204 No Content (no response body).
-    """
-    global _buffer
-    if not payload.call_outcome:
-        raise HTTPException(400, detail="Missing call_outcome")
-
-    _buffer = payload.model_dump()  # store latest record
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
-
-
-# ──────────────────────
-# 4) GET   /analytics
-# ──────────────────────
-@router.get("", response_model=CallAnalytics | None)
-def pull():
-    """
-    Pop & return the newest analytics record.
-    If none is waiting, respond 204 No Content.
-    """
-    global _buffer
-    if _buffer is None:
-        raise HTTPException(status_code=status.HTTP_204_NO_CONTENT)
-
-    record, _buffer = _buffer, None  # pop & clear
-    return record
+    # Response back to confirm
+    return {
+        "carrier_name": data.carrier_name,
+        "mc_number": data.mc_number,
+        "offer_amount": data.offer_amount,
+        "counter_offer_amount": data.counter_offer_amount,
+        "final_rate": data.final_rate,
+        "negotiation_outcome": data.negotiation_outcome,
+        "call_outcome": data.call_outcome,
+        "sentiment": data.sentiment
+    }
