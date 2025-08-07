@@ -4,11 +4,13 @@ GET pops the newest record and immediately discards it.
 Nothing is written to disk or a DB.
 """
 
+import os
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, field_validator
-from typing import Optional
+from typing import Optional, List
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
+DATA_STORE: List[dict] = []
 
 # Step 1: Define Pydantic data model for validation
 class CallAnalytics(BaseModel):
@@ -38,17 +40,10 @@ async def receive_call_data(data: CallAnalytics) -> CallAnalytics:
 
     # Step 3: Process or store the data (e.g., save to DB, log, queue)
     # For now, just log it
-    json_str = data.model_dump_json()
-    print("Received call analytics:", json_str)
+    DATA_STORE.append(data.model_dump())
 
-    # Response back to confirm
-    return {
-        "carrier_name": data.carrier_name,
-        "mc_number": data.mc_number,
-        "offer_amount": data.offer_amount,
-        "counter_offer_amount": data.counter_offer_amount,
-        "final_rate": data.final_rate,
-        "negotiation_outcome": data.negotiation_outcome,
-        "call_outcome": data.call_outcome,
-        "sentiment": data.sentiment
-    }
+    return data
+
+@router.get("/events", response_model=List[CallAnalytics])
+async def get_events():
+    return DATA_STORE[-200:]  # return last 200 events

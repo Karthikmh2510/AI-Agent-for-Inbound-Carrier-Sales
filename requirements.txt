@@ -15,3 +15,6 @@ langgraph
 langsmith
 openai
 twilio
+streamlit
+plotly
+requests

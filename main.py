@@ -24,6 +24,8 @@ app = FastAPI(title="Inbound Carrier Sales API")
 @app.middleware("http")
 async def api_key_auth(request: Request, call_next):
     # allow health-checks and docs without auth
+    if request.url.path == "/analytics/events":
+        return await call_next(request)
     if request.url.path in {"/ping", "/docs", "/openapi.json"}:
         return await call_next(request)
 
