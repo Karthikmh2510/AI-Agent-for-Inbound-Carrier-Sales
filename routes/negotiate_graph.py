@@ -357,4 +357,4 @@ def run_negotiation(board_rate: float, initial_offer: float, attempts: int = 1) 
     res = final_state["result"]
     res["attempts"] = final_state["attempts"]  # fetch updated state attempts
     return res
-    return final_state["result"]
+    

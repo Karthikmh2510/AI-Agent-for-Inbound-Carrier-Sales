@@ -60,5 +60,8 @@ def evaluate_offer(payload: OfferIn):
     # ensure required keys present
     result.setdefault("handoff", result.get("status") == "accept")
     result.setdefault("final",   result.get("status") in ("accept", "reject"))
-    result["attempts"] = payload.attempts
+    
+    updated = result.get("attempts", payload.attempts)
+    # result["attempts"] = updated
+
     return result
